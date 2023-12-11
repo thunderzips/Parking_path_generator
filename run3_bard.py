@@ -5,6 +5,7 @@ from torch import optim
 import torch.utils.data as data
 import torchvision
 import random
+import sys
 
 from torchvision.utils import save_image
 
@@ -77,8 +78,8 @@ x = torch.rand(1, 3, 64, 64).to("cuda:0")
 cond = torch.rand(1, 3, 64, 64).to("cuda:0")
 reconstruction, log_det_jacobian = cnf(x, cond)
 
-optimizer = optim.Adam(cnf.parameters(), lr = 0.001)
-# optimizer = optim.RMSprop(cnf.parameters(),lr=0.0001)
+# optimizer = optim.Adam(cnf.parameters(), lr = 0.001)
+optimizer = optim.RMSprop(cnf.parameters(),lr=0.0001)
 # optimizer = optim.Adagrad(cnf.parameters(),lr=0.0001)
 
 loss_criterion = nn.MSELoss()
@@ -88,12 +89,12 @@ img_transform = torchvision.transforms.Compose([
     torchvision.transforms.Resize(64),
     torchvision.transforms.ToTensor(),
     # torchvision.transforms.Normalize((0.0001, 0.0001,0.9), (0.229, 0.224, 0.225))
-    torchvision.transforms.Normalize((0.9,0.0001,0.0001), (0.081, 0.222, 0.2201)),
+    # torchvision.transforms.Normalize((0.9,0.0001,0.0001), (0.081, 0.222, 0.2201)),
     # torchvision.transforms.Grayscale(num_output_channels=3)
     torchvision.transforms.ConvertImageDtype(dtype= torch.float32)
     ])
 
-batch_size = 8
+batch_size = 16
 img_data = torchvision.datasets.ImageFolder(root="input_images2",transform=img_transform)
 data_loader = data.DataLoader(img_data, batch_size, shuffle=False)
 
@@ -104,59 +105,51 @@ print("ENDED")
 
 
 num_epochs = 2000
-interval = 9
 targets = list(target_data_loader)
-for epoch in range(num_epochs):
+j = 20
 
+for epoch in range(num_epochs):
     for i, v in enumerate(data_loader):
         target_image, _ = targets[i]
-        # target_image = target_images[i].to("cuda:0")
-        # Extract source image and conditioning variable
-        # print("i= ",i)
-        # print(v[0].shape)
         x = v[0].to("cuda:0")
 
         cond = torch.zeros(1, 3, 64, 64).to("cuda:0")        # im1 = Image.fromarray(target_image.numpy()[0][0])
-        # print(im1.size)
-        # im1.save("target_image.jpg")
 
 
         # Generate reconstructed image
         reconstruction, log_det_jacobian = cnf(x, cond)
+        # print(log_det_jacobian.shape)
+        log_sum = torch.sum(log_det_jacobian)
 
-        # Calculate loss
-        # loss = reconstruction_loss(reconstruction, target_image) + adversarial_loss(reconstruction)
-        # print("target", target_image.shape)
-        # print("reconstruction ", reconstruction.shape)
-
+        if (j+i+1)%30 == 1:
+            rec = reconstruction
+            tar = target_image
+            ori = v[0]
 
         try:
             # loss = 0
             # for rec in reconstruction.to("cuda:0"):
                 # loss += loss_criterion(rec, target_image)
-            loss = loss_criterion(reconstruction.to("cuda:0"), target_image.to("cuda:0"))
-            # loss = loss_criterion(reconstruction.to("cuda:0"), target_image)
-            # loss = torch.sum(log_det_jacobian)
+            loss = loss_criterion(reconstruction.to("cuda:0"), target_image.to("cuda:0"))# + 10000/(log_sum[-1]+100)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            # if random.random()<0.2:
-
-        
         except:
             print("SKIPPED!!!!!!!!!!")
-
         
-        # Print training progress
-        # if i % print_interval == 0:
-    save_image(reconstruction,"reconstructed_image.png")
-    save_image(target_image,"target_image.png")
+    j += 1
+    if not loss.item()==float('nan'):
+        try:
+            save_image(rec,"reconstructed_image.png")
+            save_image(tar,"target_image.png")
+            save_image(ori,"input_image.png")
+        except:
+            pass
+        torch.jit.save(torch.jit.trace(cnf, (torch.randn(1, 3, 64, 64).to("cuda:0"),torch.randn(1, 3, 64, 64).to("cuda:0"))), "saved_model.pt")
+    
+    else:
+        pass
+        # sys.exit()
     print(f'Epoch: {epoch}/{num_epochs}, Batch: {i}/{len(data_loader)}, Loss: {loss.item()}')
 
-    # Evaluate model on validation set
-    
-    # save_image(target_image,"target_image.png")
-    # save_image(reconstruction,"reconstructed_image.png")
-
-    torch.jit.save(torch.jit.trace(cnf, (torch.randn(1, 3, 64, 64).to("cuda:0"),torch.randn(1, 3, 64, 64).to("cuda:0"))), "saved_model.pt")
 print("DONE!!")
