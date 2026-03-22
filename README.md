@@ -6,6 +6,7 @@
 Pixel-to-pixel GAN that predicts reverse-parking paths from occupancy images.  
 Includes a deterministic A* + geometric planner used to generate training data.
 
+https://github.com/Pandas-Team/Automatic-Parking
 ---
 
 ## Problem
